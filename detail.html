@@ -75,6 +75,7 @@
               <span class="pill">🍽 servings: ${r.servings || "?"}</span>
               <span class="pill author">@ ${escapeHtml(r.authorName || "名無しさん")}</span>
               <button id="like-btn" class="like-btn" disabled>❤ ...</button>
+              <button id="share-btn" class="btn" style="padding:.3rem .8rem;">🔗 共有リンクをコピー</button>
             </div>
 
             <div class="detail-columns">
@@ -101,6 +102,7 @@
 
       setupLikeButton(r);
       setupOwnerActions(r);
+      setupShareButton(r);
     } catch (e) {
       content.innerHTML = `<div class="empty-state"><h3>読み込みに失敗しました</h3><p>${escapeHtml(e.message)}</p></div>`;
     }
@@ -165,6 +167,31 @@
       if (!confirm("このレシピを削除します。よろしいですか?")) return;
       await deleteRecipe(recipe.id);
       window.location.href = "index.html";
+    });
+  }
+
+  async function setupShareButton(recipe) {
+    const btn = document.getElementById("share-btn");
+
+    if (isLocalMode) {
+      btn.disabled = true;
+      btn.title = "共有リンクはFirebase接続後(本番モード)で利用できます";
+      return;
+    }
+
+    const { SHARE_LINK_BASE } = await import("./js/auth-config.js");
+    const shareUrl = `${SHARE_LINK_BASE.replace(/\/$/, "")}/r/${recipe.id}`;
+
+    btn.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(shareUrl);
+      } catch {
+        window.prompt("このURLをコピーしてください:", shareUrl);
+        return;
+      }
+      const original = btn.textContent;
+      btn.textContent = "コピーしました!";
+      setTimeout(() => { btn.textContent = original; }, 1800);
     });
   }
 
