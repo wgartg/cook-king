@@ -209,6 +209,19 @@
   const statusEl = document.getElementById("status");
   const submitBtn = document.getElementById("submit-btn");
 
+  async function notifyDiscord(recipeId) {
+    try {
+      const { SHARE_LINK_BASE } = await import("./js/auth-config.js");
+      await fetch(`${SHARE_LINK_BASE.replace(/\/$/, "")}/notify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recipeId }),
+      });
+    } catch {
+      // 通知に失敗しても投稿自体はすでに成功しているので、ここでは何もしない
+    }
+  }
+
   function fillFormFromRecipe(r) {
     document.getElementById("title").value = r.title || "";
     document.getElementById("cookTimeMin").value = r.cookTimeMin || "";
@@ -281,6 +294,7 @@
           fields.authorName = document.getElementById("authorName").value.trim() || "名無しさん";
         }
         const newId = await createRecipe(fields);
+        if (!isLocalMode) notifyDiscord(newId); // 失敗しても投稿自体は成功させたいのでawaitしない
         statusEl.textContent = "投稿しました!一覧ページへ移動します。";
         setTimeout(() => { window.location.href = "detail.html?id=" + newId; }, 800);
       }
