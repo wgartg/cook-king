@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>レシピ詳細 | わっしょい みんなの料理人</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <a href="index.html" class="brand">
+    <span class="mark">わっしょい</span>
+    <span class="title">みんなの料理人</span>
+    <span class="sub">community-cookbook</span>
+  </a>
+  <nav class="nav-actions">
+    <button id="theme-toggle" class="icon-btn" title="テーマ切り替え">☾</button>
+    <a href="post.html" class="btn btn-primary">＋ New recipe</a>
+  </nav>
+</header>
+
+<div class="page">
+  <aside class="sidebar">
+    <a href="index.html">📖 レシピ一覧</a>
+    <a href="post.html">＋ 新規投稿</a>
+  </aside>
+
+  <main class="content">
+    <a href="index.html" class="back-link">← Recipes</a>
+    <div id="content"></div>
+  </main>
+</div>
+
+<footer>わっしょい みんなの料理人 — community cookbook, 10 users edition</footer>
+
+<script type="module">
+  import { initTheme, toggleTheme } from "./js/theme.js";
+  initTheme();
+  document.getElementById("theme-toggle").addEventListener("click", toggleTheme);
+</script>
+
+<script type="module">
+  import { getRecipe } from "./js/data.js";
+
+  function escapeHtml(str) {
+    return (str || "").replace(/[&<>"']/g, c => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    }[c]));
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  const id = params.get("id");
+  const content = document.getElementById("content");
+
+  async function load() {
+    if (!id) { content.innerHTML = `<div class="empty-state"><h3>レシピが見つかりません</h3></div>`; return; }
+    try {
+      const r = await getRecipe(id);
+      if (!r) { content.innerHTML = `<div class="empty-state"><h3>レシピが見つかりません</h3></div>`; return; }
+
+      const heroImg = r.imageUrl ? `<div class="detail-hero"><img src="${r.imageUrl}" alt="${escapeHtml(r.title)}"></div>` : "";
+
+      content.innerHTML = `
+        <div class="readme-box">
+          ${heroImg}
+          <div class="readme-header">📄 README.md — ${escapeHtml(r.title)}</div>
+          <div class="detail-body">
+            <h1>${escapeHtml(r.title)}</h1>
+            <div class="detail-meta">
+              <span class="pill">⏱ ${r.cookTimeMin || "?"}min</span>
+              <span class="pill">🍽 servings: ${r.servings || "?"}</span>
+              <span class="pill author">@ ${escapeHtml(r.authorName || "名無しさん")}</span>
+            </div>
+
+            <div class="detail-columns">
+              <div>
+                <div class="section-title">Ingredients</div>
+                <ul class="checklist">
+                  ${(r.ingredients || []).map(i => `<li><span class="box"></span><span>${escapeHtml(i.name)}</span><span class="amount">${escapeHtml(i.amount)}</span></li>`).join("")}
+                </ul>
+              </div>
+              <div>
+                <div class="section-title">Steps</div>
+                <ol class="step-list">
+                  ${(r.steps || []).map((s, idx) => `<li><div class="num">${idx + 1}</div><div>${escapeHtml(s)}</div></li>`).join("")}
+                </ol>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    } catch (e) {
+      content.innerHTML = `<div class="empty-state"><h3>読み込みに失敗しました</h3><p>${escapeHtml(e.message)}</p></div>`;
+    }
+  }
+
+  load();
+</script>
+</body>
+</html>

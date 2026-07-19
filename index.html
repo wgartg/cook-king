@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>わっしょい みんなの料理人</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <a href="index.html" class="brand">
+    <span class="mark">わっしょい</span>
+    <span class="title">みんなの料理人</span>
+    <span class="sub">community-cookbook</span>
+  </a>
+  <nav class="nav-actions">
+    <button id="theme-toggle" class="icon-btn" title="テーマ切り替え">☾</button>
+    <a href="post.html" class="btn btn-primary">＋ New recipe</a>
+  </nav>
+</header>
+
+<div class="page">
+  <aside class="sidebar">
+    <a href="index.html" class="active">📖 レシピ一覧</a>
+    <a href="post.html">＋ 新規投稿</a>
+  </aside>
+
+  <main class="content">
+    <div id="local-banner" class="banner" style="display:none;">
+      ⚠ Firebase未設定のため <code>local-mode</code> で動作中。この端末のみに保存されます。
+    </div>
+
+    <div class="search-row">
+      <input id="search" type="text" placeholder="料理名・材料で検索 (例: 鶏むね, 味噌汁)">
+    </div>
+
+    <div class="section-title">
+      recipes <span id="count" class="count-badge">0</span>
+    </div>
+    <div id="grid" class="recipe-grid"></div>
+    <div id="empty" class="empty-state" style="display:none">
+      <h3>まだレシピがありません</h3>
+      <p>最初の一品を投稿してみましょう。</p>
+      <a href="post.html" class="btn btn-primary">＋ New recipe</a>
+    </div>
+  </main>
+</div>
+
+<footer>わっしょい みんなの料理人 — community cookbook, 10 users edition</footer>
+
+<script type="module">
+  import { initTheme, toggleTheme } from "./js/theme.js";
+  initTheme();
+  document.getElementById("theme-toggle").addEventListener("click", toggleTheme);
+</script>
+
+<script type="module">
+  import { listRecipes, isLocalMode } from "./js/data.js";
+
+  const grid = document.getElementById("grid");
+  const emptyEl = document.getElementById("empty");
+  const searchInput = document.getElementById("search");
+  const countEl = document.getElementById("count");
+  let allRecipes = [];
+
+  if (isLocalMode) document.getElementById("local-banner").style.display = "flex";
+
+  function escapeHtml(str) {
+    return (str || "").replace(/[&<>"']/g, c => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    }[c]));
+  }
+
+  function cardHtml(r) {
+    const thumb = r.imageUrl
+      ? `<img class="thumb" src="${r.imageUrl}" alt="${escapeHtml(r.title)}">`
+      : `<div class="thumb placeholder">🍚</div>`;
+    return `
+      <a class="recipe-card" href="detail.html?id=${r.id}">
+        <div class="thumb-row">
+          ${thumb}
+          <div>
+            <div class="title">${escapeHtml(r.title)}</div>
+            <div class="author">by ${escapeHtml(r.authorName || "名無しさん")}</div>
+          </div>
+        </div>
+        <div class="meta">
+          <span>⏱ ${r.cookTimeMin || "?"}min</span>
+          <span>🍽 x${r.servings || "?"}</span>
+          <span>🥕 ${(r.ingredients || []).length} items</span>
+        </div>
+      </a>`;
+  }
+
+  function render(list) {
+    countEl.textContent = list.length;
+    if (!list.length) {
+      grid.innerHTML = "";
+      emptyEl.style.display = "block";
+      return;
+    }
+    emptyEl.style.display = "none";
+    grid.innerHTML = list.map(cardHtml).join("");
+  }
+
+  async function load() {
+    grid.innerHTML = `<div class="empty-state">読み込み中...</div>`;
+    try {
+      allRecipes = await listRecipes();
+      render(allRecipes);
+    } catch (e) {
+      grid.innerHTML = `<div class="empty-state"><h3>読み込みに失敗しました</h3><p>${escapeHtml(e.message)}</p><p>js/firebase-config.js の設定を確認してください。</p></div>`;
+    }
+  }
+
+  searchInput.addEventListener("input", () => {
+    const kw = searchInput.value.trim().toLowerCase();
+    if (!kw) { render(allRecipes); return; }
+    const filtered = allRecipes.filter(r => {
+      const inTitle = (r.title || "").toLowerCase().includes(kw);
+      const inIngredients = (r.ingredients || []).some(i => (i.name || "").toLowerCase().includes(kw));
+      return inTitle || inIngredients;
+    });
+    render(filtered);
+  });
+
+  load();
+</script>
+</body>
+</html>
