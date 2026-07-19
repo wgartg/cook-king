@@ -14,9 +14,9 @@ export async function mountAuthArea() {
   function render(profile) {
     if (profile) {
       area.innerHTML = `
-        <div style="display:flex; align-items:center; gap:.5rem;">
-          <img src="${profile.avatarUrl}" alt="" style="width:24px;height:24px;border-radius:50%;">
-          <span style="font-size:.8rem;">${profile.username}</span>
+        <div style="display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; justify-content:flex-end;">
+          <img src="${profile.avatarUrl}" alt="" style="width:24px;height:24px;border-radius:50%; flex-shrink:0;">
+          <span style="font-size:.8rem; max-width:110px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${profile.username}</span>
           ${profile.isAdmin ? '<a href="admin.html" class="btn" style="padding:.3rem .7rem;">🛡 Admin</a>' : ""}
           <button id="logout-btn" class="btn" style="padding:.3rem .7rem;">Logout</button>
         </div>`;

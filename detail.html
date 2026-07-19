@@ -114,7 +114,7 @@
     let uid = null;
 
     if (isLocalMode) {
-      uid = getLocalUserId();
+      uid = await getLocalUserId();
     } else {
       const { getProfile } = await import("./js/auth.js");
       const profile = getProfile();
