@@ -1,11 +1,9 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import {
-  getFirestore, collection, addDoc, getDocs, doc, getDoc,
-  serverTimestamp, orderBy, query, limit
+  getFirestore, collection, addDoc, getDocs, doc, getDoc, deleteDoc, updateDoc,
+  serverTimestamp, orderBy, query, limit, arrayUnion, arrayRemove, increment
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js";
+import { app } from "./firebase-app.js";
 
-const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 // 画像はFirebase Storage(要Blazeプラン/カード登録)を使わず、
@@ -26,7 +24,24 @@ export async function getRecipe(id) {
 export async function createRecipe(fields) {
   const docRef = await addDoc(collection(db, "recipes"), {
     ...fields,
+    likedBy: [],
+    likesCount: 0,
     createdAt: serverTimestamp()
   });
   return docRef.id;
+}
+
+export async function updateRecipe(id, fields) {
+  await updateDoc(doc(db, "recipes", id), { ...fields });
+}
+
+export async function deleteRecipe(id) {
+  await deleteDoc(doc(db, "recipes", id));
+}
+
+export async function toggleLike(id, uid, isLiked) {
+  await updateDoc(doc(db, "recipes", id), {
+    likedBy: isLiked ? arrayRemove(uid) : arrayUnion(uid),
+    likesCount: increment(isLiked ? -1 : 1)
+  });
 }

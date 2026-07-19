@@ -15,6 +15,7 @@
     <span class="sub">community-cookbook</span>
   </a>
   <nav class="nav-actions">
+    <span id="auth-area"></span>
     <button id="theme-toggle" class="icon-btn" title="テーマ切り替え">☾</button>
     <a href="index.html" class="btn">← Recipes</a>
   </nav>
@@ -31,8 +32,21 @@
       <div id="local-banner" class="banner" style="display:none;">
         ⚠ Firebase未設定のため <code>local-mode</code> で動作中。投稿はこの端末のみに保存されます。
       </div>
-      <h2>＋ New recipe</h2>
-      <form id="recipe-form">
+
+      <div id="login-required" class="empty-state" style="display:none;">
+        <h3>投稿にはログインが必要です</h3>
+        <p>なりすまし防止のため、投稿にはDiscordログインが必要です。</p>
+        <button id="login-required-btn" class="btn btn-primary">Discordでログイン</button>
+      </div>
+
+      <div id="no-permission" class="empty-state" style="display:none;">
+        <h3>編集権限がありません</h3>
+        <p>このレシピを編集できるのは、投稿した本人か管理者だけです。</p>
+        <a href="index.html" class="btn">一覧へ戻る</a>
+      </div>
+
+      <form id="recipe-form" style="display:none;">
+        <h2 id="form-title">＋ New recipe</h2>
 
         <div class="field">
           <label>料理名</label>
@@ -50,13 +64,23 @@
           </div>
         </div>
 
-        <div class="field">
-          <label>投稿者名 <span class="hint">(任意 / 将来Discord連携予定)</span></label>
+        <div class="field" id="author-field">
+          <label>投稿者名 <span class="hint">(任意 / ローカルモードのみ)</span></label>
           <input type="text" id="authorName" placeholder="例: たろう">
+        </div>
+        <div class="field" id="author-display" style="display:none;">
+          <label>投稿者</label>
+          <div style="display:flex; align-items:center; gap:.5rem;">
+            <img id="author-avatar" src="" alt="" style="width:24px;height:24px;border-radius:50%;">
+            <span id="author-username" class="mono"></span>
+          </div>
         </div>
 
         <div class="field">
-          <label>写真 <span class="hint">(任意)</span></label>
+          <label>写真 <span class="hint" id="image-hint">(任意)</span></label>
+          <div id="existing-image-preview" style="display:none; margin-bottom:.6rem;">
+            <img id="existing-image" src="" alt="" style="max-width:160px; border-radius:6px; border:1px solid var(--border);">
+          </div>
           <input type="file" id="imageFile" accept="image/*">
         </div>
 
@@ -87,24 +111,41 @@
 
 <script type="module">
   import { initTheme, toggleTheme } from "./js/theme.js";
+  import { mountAuthArea } from "./js/auth-ui.js";
   initTheme();
   document.getElementById("theme-toggle").addEventListener("click", toggleTheme);
+  mountAuthArea();
 </script>
 
 <script type="module">
-  import { createRecipe, isLocalMode } from "./js/data.js";
+  import { createRecipe, updateRecipe, getRecipe, isLocalMode } from "./js/data.js";
 
-  if (isLocalMode) document.getElementById("local-banner").style.display = "flex";
+  const params = new URLSearchParams(window.location.search);
+  const editId = params.get("id");
+
+  const form = document.getElementById("recipe-form");
+  const loginRequired = document.getElementById("login-required");
+  const noPermission = document.getElementById("no-permission");
+  const authorField = document.getElementById("author-field");
+  const authorDisplay = document.getElementById("author-display");
+  let currentProfile = null;
+  let existingRecipe = null;
 
   const ingredientList = document.getElementById("ingredient-list");
   const stepList = document.getElementById("step-list");
+
+  function escapeHtml(str) {
+    return (str || "").replace(/[&<>"']/g, c => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    }[c]));
+  }
 
   function addIngredientRow(name = "", amount = "") {
     const row = document.createElement("div");
     row.className = "dynamic-row";
     row.innerHTML = `
-      <input type="text" placeholder="材料名(例: 鶏むね肉)" class="ing-name" value="${name}">
-      <input type="text" placeholder="分量(例: 200g)" class="ing-amount" style="max-width:130px" value="${amount}">
+      <input type="text" placeholder="材料名(例: 鶏むね肉)" class="ing-name" value="${escapeHtml(name)}">
+      <input type="text" placeholder="分量(例: 200g)" class="ing-amount" style="max-width:130px" value="${escapeHtml(amount)}">
       <button type="button" class="rm">✕</button>`;
     row.querySelector(".rm").addEventListener("click", () => row.remove());
     ingredientList.appendChild(row);
@@ -114,14 +155,25 @@
     const row = document.createElement("div");
     row.className = "dynamic-row step-item";
     const num = stepList.children.length + 1;
-    row.innerHTML = `
-      <div class="step-num">${num}</div>
-      <textarea placeholder="手順を入力" rows="2" style="flex:1">${text}</textarea>
-      <button type="button" class="rm">✕</button>`;
-    row.querySelector(".rm").addEventListener("click", () => {
-      row.remove();
-      renumberSteps();
-    });
+    const textarea = document.createElement("textarea");
+    textarea.placeholder = "手順を入力";
+    textarea.rows = 2;
+    textarea.style.flex = "1";
+    textarea.value = text; // 改行を保持するためvalueで設定(innerHTML経由にしない)
+
+    const numDiv = document.createElement("div");
+    numDiv.className = "step-num";
+    numDiv.textContent = num;
+
+    const rmBtn = document.createElement("button");
+    rmBtn.type = "button";
+    rmBtn.className = "rm";
+    rmBtn.textContent = "✕";
+    rmBtn.addEventListener("click", () => { row.remove(); renumberSteps(); });
+
+    row.appendChild(numDiv);
+    row.appendChild(textarea);
+    row.appendChild(rmBtn);
     stepList.appendChild(row);
   }
 
@@ -133,9 +185,6 @@
 
   document.getElementById("add-ingredient").addEventListener("click", () => addIngredientRow());
   document.getElementById("add-step").addEventListener("click", () => addStepRow());
-
-  addIngredientRow(); addIngredientRow(); addIngredientRow();
-  addStepRow(); addStepRow();
 
   function compressImage(file, maxWidth = 900, quality = 0.72) {
     return new Promise((resolve, reject) => {
@@ -157,9 +206,25 @@
     });
   }
 
-  const form = document.getElementById("recipe-form");
   const statusEl = document.getElementById("status");
   const submitBtn = document.getElementById("submit-btn");
+
+  function fillFormFromRecipe(r) {
+    document.getElementById("title").value = r.title || "";
+    document.getElementById("cookTimeMin").value = r.cookTimeMin || "";
+    document.getElementById("servings").value = r.servings || "";
+    ingredientList.innerHTML = "";
+    stepList.innerHTML = "";
+    (r.ingredients || []).forEach(i => addIngredientRow(i.name, i.amount));
+    (r.steps || []).forEach(s => addStepRow(s));
+    if (!(r.ingredients || []).length) addIngredientRow();
+    if (!(r.steps || []).length) addStepRow();
+    if (r.imageUrl) {
+      document.getElementById("existing-image-preview").style.display = "block";
+      document.getElementById("existing-image").src = r.imageUrl;
+      document.getElementById("image-hint").textContent = "(変更する場合のみ新しい写真を選択)";
+    }
+  }
 
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -184,31 +249,109 @@
     if (!steps.length) { statusEl.textContent = "作り方を1つ以上入力してください。"; statusEl.className = "status-msg error"; return; }
 
     submitBtn.disabled = true;
-    statusEl.textContent = "投稿中...";
+    statusEl.textContent = editId ? "更新中..." : "投稿中...";
 
     try {
       const fileInput = document.getElementById("imageFile");
       const file = fileInput.files[0] || null;
-      const imageUrl = file ? await compressImage(file) : "";
 
-      await createRecipe({
+      const fields = {
         title,
         cookTimeMin: Number(document.getElementById("cookTimeMin").value) || null,
         servings: Number(document.getElementById("servings").value) || null,
-        authorName: document.getElementById("authorName").value.trim() || "名無しさん",
         ingredients,
-        steps,
-        imageUrl
-      });
+        steps
+      };
 
-      statusEl.textContent = "投稿しました!一覧ページへ移動します。";
-      setTimeout(() => { window.location.href = "index.html"; }, 800);
+      if (editId) {
+        fields.imageUrl = file ? await compressImage(file) : (existingRecipe.imageUrl || "");
+        fields.authorId = existingRecipe.authorId;
+        fields.authorName = existingRecipe.authorName;
+        fields.authorAvatar = existingRecipe.authorAvatar;
+        await updateRecipe(editId, fields);
+        statusEl.textContent = "更新しました!詳細ページへ移動します。";
+        setTimeout(() => { window.location.href = "detail.html?id=" + editId; }, 800);
+      } else {
+        fields.imageUrl = file ? await compressImage(file) : "";
+        if (currentProfile) {
+          fields.authorId = currentProfile.uid;
+          fields.authorName = currentProfile.username;
+          fields.authorAvatar = currentProfile.avatarUrl;
+        } else {
+          fields.authorName = document.getElementById("authorName").value.trim() || "名無しさん";
+        }
+        const newId = await createRecipe(fields);
+        statusEl.textContent = "投稿しました!一覧ページへ移動します。";
+        setTimeout(() => { window.location.href = "detail.html?id=" + newId; }, 800);
+      }
     } catch (err) {
-      statusEl.textContent = "投稿に失敗しました: " + err.message;
+      statusEl.textContent = "保存に失敗しました: " + err.message;
       statusEl.className = "status-msg error";
       submitBtn.disabled = false;
     }
   });
+
+  async function init() {
+    if (editId) {
+      existingRecipe = await getRecipe(editId);
+      if (!existingRecipe) {
+        noPermission.querySelector("h3").textContent = "レシピが見つかりません";
+        noPermission.querySelector("p").textContent = "";
+        noPermission.style.display = "block";
+        return;
+      }
+
+      let canEdit = isLocalMode;
+      if (!isLocalMode) {
+        const { getProfile } = await import("./js/auth.js");
+        currentProfile = getProfile();
+        canEdit = !!currentProfile && (currentProfile.isAdmin || currentProfile.uid === existingRecipe.authorId);
+      }
+
+      if (!canEdit) {
+        noPermission.style.display = "block";
+        return;
+      }
+
+      document.getElementById("form-title").textContent = "✏️ Edit recipe";
+      document.getElementById("submit-btn").textContent = "更新する";
+      authorField.style.display = "none";
+      authorDisplay.style.display = "block";
+      document.getElementById("author-avatar").src = existingRecipe.authorAvatar || "";
+      document.getElementById("author-username").textContent = existingRecipe.authorName || "名無しさん";
+      fillFormFromRecipe(existingRecipe);
+
+      if (isLocalMode) document.getElementById("local-banner").style.display = "flex";
+      form.style.display = "block";
+      // 新規作成用の初期空行が入らないよう、最初のaddIngredientRow/addStepRow呼び出しはスキップ
+      return;
+    }
+
+    // 新規投稿モード
+    addIngredientRow(); addIngredientRow(); addIngredientRow();
+    addStepRow(); addStepRow();
+
+    if (isLocalMode) {
+      document.getElementById("local-banner").style.display = "flex";
+      form.style.display = "block";
+      return;
+    }
+
+    const { getProfile, loginWithDiscord } = await import("./js/auth.js");
+    currentProfile = getProfile();
+    document.getElementById("login-required-btn").addEventListener("click", loginWithDiscord);
+    if (currentProfile) {
+      form.style.display = "block";
+      authorField.style.display = "none";
+      authorDisplay.style.display = "block";
+      document.getElementById("author-avatar").src = currentProfile.avatarUrl;
+      document.getElementById("author-username").textContent = currentProfile.username;
+    } else {
+      loginRequired.style.display = "block";
+    }
+  }
+
+  init();
 </script>
 </body>
 </html>

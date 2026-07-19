@@ -15,6 +15,7 @@
     <span class="sub">community-cookbook</span>
   </a>
   <nav class="nav-actions">
+    <span id="auth-area"></span>
     <button id="theme-toggle" class="icon-btn" title="テーマ切り替え">☾</button>
     <a href="post.html" class="btn btn-primary">＋ New recipe</a>
   </nav>
@@ -36,12 +37,14 @@
 
 <script type="module">
   import { initTheme, toggleTheme } from "./js/theme.js";
+  import { mountAuthArea } from "./js/auth-ui.js";
   initTheme();
   document.getElementById("theme-toggle").addEventListener("click", toggleTheme);
+  mountAuthArea();
 </script>
 
 <script type="module">
-  import { getRecipe } from "./js/data.js";
+  import { getRecipe, isLocalMode } from "./js/data.js";
 
   function escapeHtml(str) {
     return (str || "").replace(/[&<>"']/g, c => ({
@@ -71,6 +74,7 @@
               <span class="pill">⏱ ${r.cookTimeMin || "?"}min</span>
               <span class="pill">🍽 servings: ${r.servings || "?"}</span>
               <span class="pill author">@ ${escapeHtml(r.authorName || "名無しさん")}</span>
+              <button id="like-btn" class="like-btn" disabled>❤ ...</button>
             </div>
 
             <div class="detail-columns">
@@ -87,12 +91,81 @@
                 </ol>
               </div>
             </div>
+            <div id="owner-actions" style="margin-top:1.5rem; display:none; gap:.6rem;">
+              <a id="edit-link" href="post.html?id=${r.id}" class="btn">✏️ 編集する</a>
+              <button id="delete-btn" class="btn" style="border-color:var(--brand); color:var(--brand);">🗑 このレシピを削除</button>
+            </div>
           </div>
         </div>
       `;
+
+      setupLikeButton(r);
+      setupOwnerActions(r);
     } catch (e) {
       content.innerHTML = `<div class="empty-state"><h3>読み込みに失敗しました</h3><p>${escapeHtml(e.message)}</p></div>`;
     }
+  }
+
+  async function setupLikeButton(recipe) {
+    const { toggleLike, getLocalUserId } = await import("./js/data.js");
+    const btn = document.getElementById("like-btn");
+    let uid = null;
+
+    if (isLocalMode) {
+      uid = getLocalUserId();
+    } else {
+      const { getProfile } = await import("./js/auth.js");
+      const profile = getProfile();
+      uid = profile ? profile.uid : null;
+    }
+
+    let likedBy = recipe.likedBy || [];
+    let isLiked = !!uid && likedBy.includes(uid);
+
+    function render() {
+      btn.textContent = `❤ ${likedBy.length}`;
+      btn.classList.toggle("liked", isLiked);
+      btn.disabled = !uid;
+      btn.title = uid ? "" : "いいねするにはログインが必要です";
+    }
+    render();
+
+    btn.addEventListener("click", async () => {
+      if (!uid) return;
+      btn.disabled = true;
+      const wasLiked = isLiked;
+      isLiked = !wasLiked;
+      likedBy = wasLiked ? likedBy.filter(u => u !== uid) : [...likedBy, uid];
+      render();
+      try {
+        await toggleLike(recipe.id, uid, wasLiked);
+      } catch (e) {
+        // 失敗したら元に戻す
+        isLiked = wasLiked;
+        likedBy = wasLiked ? [...likedBy, uid] : likedBy.filter(u => u !== uid);
+      }
+      render();
+    });
+  }
+
+  async function setupOwnerActions(recipe) {
+    const { deleteRecipe } = await import("./js/data.js");
+    const actions = document.getElementById("owner-actions");
+    let canManage = isLocalMode; // ローカルモードでは自由に編集・削除可(テスト用)
+
+    if (!isLocalMode) {
+      const { getProfile } = await import("./js/auth.js");
+      const profile = getProfile();
+      canManage = !!profile && (profile.isAdmin || profile.uid === recipe.authorId);
+    }
+
+    if (!canManage) return;
+    actions.style.display = "flex";
+    document.getElementById("delete-btn").addEventListener("click", async () => {
+      if (!confirm("このレシピを削除します。よろしいですか?")) return;
+      await deleteRecipe(recipe.id);
+      window.location.href = "index.html";
+    });
   }
 
   load();

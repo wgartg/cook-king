@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin | わっしょい みんなの料理人</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <a href="index.html" class="brand">
+    <span class="mark">わっしょい</span>
+    <span class="title">みんなの料理人</span>
+    <span class="sub">community-cookbook</span>
+  </a>
+  <nav class="nav-actions">
+    <span id="auth-area"></span>
+    <button id="theme-toggle" class="icon-btn" title="テーマ切り替え">☾</button>
+    <a href="index.html" class="btn">← Recipes</a>
+  </nav>
+</header>
+
+<div class="page">
+  <aside class="sidebar">
+    <a href="index.html">📖 レシピ一覧</a>
+    <a href="post.html">＋ 新規投稿</a>
+    <a href="admin.html" class="active">🛡 Admin</a>
+  </aside>
+
+  <main class="content">
+    <div class="section-title">🛡 Admin — recipe management</div>
+    <div id="content"></div>
+  </main>
+</div>
+
+<footer>わっしょい みんなの料理人 — community cookbook, 10 users edition</footer>
+
+<script type="module">
+  import { initTheme, toggleTheme } from "./js/theme.js";
+  import { mountAuthArea } from "./js/auth-ui.js";
+  initTheme();
+  document.getElementById("theme-toggle").addEventListener("click", toggleTheme);
+  mountAuthArea();
+</script>
+
+<script type="module">
+  import { isLocalMode, listRecipes, deleteRecipe } from "./js/data.js";
+
+  const content = document.getElementById("content");
+
+  function escapeHtml(str) {
+    return (str || "").replace(/[&<>"']/g, c => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    }[c]));
+  }
+
+  function rowHtml(r) {
+    return `
+      <div class="recipe-card" style="cursor:default;">
+        <div class="thumb-row">
+          ${r.imageUrl ? `<img class="thumb" src="${r.imageUrl}">` : `<div class="thumb placeholder">🍚</div>`}
+          <div style="flex:1;">
+            <a class="title" href="detail.html?id=${r.id}">${escapeHtml(r.title)}</a>
+            <div class="author">by ${escapeHtml(r.authorName || "名無しさん")} · ❤ ${r.likesCount || 0}</div>
+          </div>
+          <a class="btn" href="post.html?id=${r.id}" style="flex-shrink:0;">編集</a>
+          <button class="btn del-btn" data-id="${r.id}" style="border-color:var(--brand); color:var(--brand); flex-shrink:0;">削除</button>
+        </div>
+      </div>`;
+  }
+
+  async function renderList() {
+    content.innerHTML = `<div class="empty-state">読み込み中...</div>`;
+    const recipes = await listRecipes();
+    if (!recipes.length) {
+      content.innerHTML = `<div class="empty-state"><h3>レシピがありません</h3></div>`;
+      return;
+    }
+    content.innerHTML = `<div class="recipe-grid">${recipes.map(rowHtml).join("")}</div>`;
+    content.querySelectorAll(".del-btn").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        if (!confirm("このレシピを削除します。よろしいですか?")) return;
+        await deleteRecipe(btn.dataset.id);
+        renderList();
+      });
+    });
+  }
+
+  async function init() {
+    if (isLocalMode) {
+      // ローカルモードは常に管理画面を利用可(テスト用)
+      renderList();
+      return;
+    }
+    const { getProfile } = await import("./js/auth.js");
+    const profile = getProfile();
+    if (!profile || !profile.isAdmin) {
+      content.innerHTML = `
+        <div class="empty-state">
+          <h3>権限がありません</h3>
+          <p>このページは管理者用Discordアカウントでログインした人だけが利用できます。</p>
+          <a href="index.html" class="btn">一覧へ戻る</a>
+        </div>`;
+      return;
+    }
+    renderList();
+  }
+
+  init();
+</script>
+</body>
+</html>

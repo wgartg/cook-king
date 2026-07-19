@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ログイン処理中 | わっしょい みんなの料理人</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="page" style="grid-template-columns:1fr;">
+  <main class="content">
+    <div id="msg" class="empty-state">ログイン処理中...</div>
+  </main>
+</div>
+
+<script type="module">
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get("code");
+  const errorParam = params.get("error");
+  const msg = document.getElementById("msg");
+
+  if (errorParam) {
+    msg.innerHTML = `<h3>ログインがキャンセルされました</h3><p><a href="index.html" class="btn">一覧へ戻る</a></p>`;
+  } else if (!code) {
+    msg.innerHTML = `<h3>ログインに失敗しました</h3><p>認証コードが見つかりません。</p><p><a href="index.html" class="btn">一覧へ戻る</a></p>`;
+  } else {
+    import("./js/auth.js").then(({ completeDiscordLogin }) => {
+      completeDiscordLogin(code)
+        .then(() => { window.location.href = "index.html"; })
+        .catch(err => {
+          msg.innerHTML = `<h3>ログインに失敗しました</h3><p>${err.message}</p><p><a href="index.html" class="btn">一覧へ戻る</a></p>`;
+        });
+    });
+  }
+</script>
+</body>
+</html>

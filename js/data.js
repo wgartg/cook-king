@@ -12,3 +12,7 @@ if (isLocalMode) {
 export const listRecipes = impl.listRecipes;
 export const getRecipe = impl.getRecipe;
 export const createRecipe = impl.createRecipe;
+export const updateRecipe = impl.updateRecipe;
+export const deleteRecipe = impl.deleteRecipe;
+export const toggleLike = impl.toggleLike;
+export const getLocalUserId = impl.getLocalUserId; // ローカルモードのみ有効(undefined in Firebase mode)

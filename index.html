@@ -15,6 +15,7 @@
     <span class="sub">community-cookbook</span>
   </a>
   <nav class="nav-actions">
+    <span id="auth-area"></span>
     <button id="theme-toggle" class="icon-btn" title="テーマ切り替え">☾</button>
     <a href="post.html" class="btn btn-primary">＋ New recipe</a>
   </nav>
@@ -51,8 +52,10 @@
 
 <script type="module">
   import { initTheme, toggleTheme } from "./js/theme.js";
+  import { mountAuthArea } from "./js/auth-ui.js";
   initTheme();
   document.getElementById("theme-toggle").addEventListener("click", toggleTheme);
+  mountAuthArea();
 </script>
 
 <script type="module">
@@ -89,6 +92,7 @@
           <span>⏱ ${r.cookTimeMin || "?"}min</span>
           <span>🍽 x${r.servings || "?"}</span>
           <span>🥕 ${(r.ingredients || []).length} items</span>
+          <span>❤ ${r.likesCount || 0}</span>
         </div>
       </a>`;
   }
