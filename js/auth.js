@@ -27,7 +27,13 @@ export async function completeDiscordLogin(code) {
     body: JSON.stringify({ code, redirectUri })
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.detail ? `${data.error}: ${data.detail}` : (data.error || "login_failed"));
+  if (!res.ok) {
+    const parts = [data.error || "login_failed"];
+    if (data.detail) parts.push(`detail=${data.detail}`);
+    if (data.used_client_id) parts.push(`used_client_id=${data.used_client_id}`);
+    if (data.redirect_uri_sent) parts.push(`redirect_uri_sent=${data.redirect_uri_sent}`);
+    throw new Error(parts.join(" | "));
+  }
   await signInWithCustomToken(auth, data.firebaseToken);
   localStorage.setItem(PROFILE_KEY, JSON.stringify(data.profile));
   return data.profile;
