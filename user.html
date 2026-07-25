@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ユーザーページ | わっしょい みんなの料理人</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <a href="index.html" class="brand">
+    <span class="mark">わっしょい</span>
+    <span class="title">みんなの料理人</span>
+    <span class="sub">community-cookbook</span>
+  </a>
+  <nav class="nav-actions">
+    <span id="auth-area"></span>
+    <button id="theme-toggle" class="icon-btn" title="テーマ切り替え">☾</button>
+    <a href="post.html" class="btn btn-primary">＋ New recipe</a>
+  </nav>
+</header>
+
+<div class="page">
+  <aside class="sidebar">
+    <a href="index.html">📖 レシピ一覧</a>
+    <a href="post.html">＋ 新規投稿</a>
+    <a href="bookmarks.html">🔖 ブックマーク</a>
+  </aside>
+
+  <main class="content">
+    <a href="index.html" class="back-link">← Recipes</a>
+    <div id="profile-header"></div>
+    <div class="section-title">投稿したレシピ <span id="count" class="count-badge">0</span></div>
+    <div id="grid" class="recipe-grid"></div>
+    <div id="empty" class="empty-state" style="display:none;">
+      <h3>まだ投稿がありません</h3>
+    </div>
+  </main>
+</div>
+
+<footer>わっしょい みんなの料理人 — community cookbook, 10 users edition</footer>
+
+<script type="module">
+  import { initTheme, toggleTheme } from "./js/theme.js";
+  import { mountAuthArea } from "./js/auth-ui.js";
+  initTheme();
+  document.getElementById("theme-toggle").addEventListener("click", toggleTheme);
+  mountAuthArea();
+</script>
+
+<script type="module">
+  import { listRecipes } from "./js/data.js";
+
+  function escapeHtml(str) {
+    return (str || "").replace(/[&<>"']/g, c => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    }[c]));
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  const uid = params.get("uid");
+  const grid = document.getElementById("grid");
+  const emptyEl = document.getElementById("empty");
+  const countEl = document.getElementById("count");
+  const profileHeader = document.getElementById("profile-header");
+
+  function cardHtml(r) {
+    const thumb = r.imageUrl
+      ? `<img class="thumb" src="${r.imageUrl}" alt="${escapeHtml(r.title)}">`
+      : `<div class="thumb placeholder">🍚</div>`;
+    return `
+      <a class="recipe-card" href="detail.html?id=${r.id}">
+        <div class="thumb-row">
+          ${thumb}
+          <div>
+            <div class="title">${escapeHtml(r.title)}</div>
+          </div>
+        </div>
+        <div class="meta">
+          <span>⏱ ${r.cookTimeMin || "?"}min</span>
+          <span>🍽 x${r.servings || "?"}</span>
+          <span>❤ ${r.likesCount || 0}</span>
+        </div>
+      </a>`;
+  }
+
+  async function load() {
+    if (!uid) {
+      profileHeader.innerHTML = `<div class="empty-state"><h3>ユーザーが指定されていません</h3></div>`;
+      return;
+    }
+    grid.innerHTML = `<div class="empty-state">読み込み中...</div>`;
+    try {
+      const all = await listRecipes();
+      const mine = all.filter(r => r.authorId === uid);
+
+      if (mine.length) {
+        const sample = mine[0];
+        profileHeader.innerHTML = `
+          <div style="display:flex; align-items:center; gap:.8rem; margin-bottom:1.5rem;">
+            ${sample.authorAvatar ? `<img src="${sample.authorAvatar}" alt="" style="width:48px;height:48px;border-radius:50%;">` : ""}
+            <h1 style="font-size:1.3rem;">${escapeHtml(sample.authorName || "名無しさん")}</h1>
+          </div>`;
+      } else {
+        profileHeader.innerHTML = `<h1 style="font-size:1.3rem; margin-bottom:1.5rem;">ユーザーページ</h1>`;
+      }
+
+      countEl.textContent = mine.length;
+      grid.innerHTML = "";
+      if (!mine.length) {
+        emptyEl.style.display = "block";
+      } else {
+        emptyEl.style.display = "none";
+        grid.innerHTML = mine.map(cardHtml).join("");
+      }
+    } catch (e) {
+      grid.innerHTML = `<div class="empty-state"><h3>読み込みに失敗しました</h3><p>${escapeHtml(e.message)}</p></div>`;
+    }
+  }
+
+  load();
+</script>
+</body>
+</html>

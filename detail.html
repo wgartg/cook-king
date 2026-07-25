@@ -25,6 +25,7 @@
   <aside class="sidebar">
     <a href="index.html">📖 レシピ一覧</a>
     <a href="post.html">＋ 新規投稿</a>
+    <a href="bookmarks.html">🔖 ブックマーク</a>
   </aside>
 
   <main class="content">
@@ -73,8 +74,10 @@
             <div class="detail-meta">
               <span class="pill">⏱ ${r.cookTimeMin || "?"}min</span>
               <span class="pill">🍽 servings: ${r.servings || "?"}</span>
-              <span class="pill author">@ ${escapeHtml(r.authorName || "名無しさん")}</span>
+              ${r.difficulty ? `<span class="pill">${{ easy: "🎚 簡単", normal: "🎚 普通", hard: "🎚 難しい" }[r.difficulty] || ""}</span>` : ""}
+              <a class="pill author" href="user.html?uid=${encodeURIComponent(r.authorId || "")}">@ ${escapeHtml(r.authorName || "名無しさん")}</a>
               <button id="like-btn" class="like-btn" disabled>❤ ...</button>
+              <button id="bookmark-btn" class="like-btn" disabled>🔖 ...</button>
               <button id="share-btn" class="btn" style="padding:.3rem .8rem;">🔗 共有リンクをコピー</button>
             </div>
 
@@ -96,13 +99,19 @@
               <a id="edit-link" href="post.html?id=${r.id}" class="btn">✏️ 編集する</a>
               <button id="delete-btn" class="btn" style="border-color:var(--brand); color:var(--brand);">🗑 このレシピを削除</button>
             </div>
+
+            <div class="section-title" style="margin-top:2rem;">Comments <span id="comment-count" class="count-badge">0</span></div>
+            <div id="comment-list" class="comment-list"></div>
+            <div id="comment-form-area"></div>
           </div>
         </div>
       `;
 
       setupLikeButton(r);
+      setupBookmarkButton(r);
       setupOwnerActions(r);
       setupShareButton(r);
+      setupComments(r);
     } catch (e) {
       content.innerHTML = `<div class="empty-state"><h3>読み込みに失敗しました</h3><p>${escapeHtml(e.message)}</p></div>`;
     }
@@ -145,6 +154,47 @@
         // 失敗したら元に戻す
         isLiked = wasLiked;
         likedBy = wasLiked ? [...likedBy, uid] : likedBy.filter(u => u !== uid);
+      }
+      render();
+    });
+  }
+
+  async function setupBookmarkButton(recipe) {
+    const { toggleBookmark, getLocalUserId } = await import("./js/data.js");
+    const btn = document.getElementById("bookmark-btn");
+    let uid = null;
+
+    if (isLocalMode) {
+      uid = await getLocalUserId();
+    } else {
+      const { getProfile } = await import("./js/auth.js");
+      const profile = getProfile();
+      uid = profile ? profile.uid : null;
+    }
+
+    let bookmarkedBy = recipe.bookmarkedBy || [];
+    let isBookmarked = !!uid && bookmarkedBy.includes(uid);
+
+    function render() {
+      btn.textContent = isBookmarked ? "🔖 保存済み" : "🔖 ブックマーク";
+      btn.classList.toggle("liked", isBookmarked);
+      btn.disabled = !uid;
+      btn.title = uid ? "" : "ブックマークするにはログインが必要です";
+    }
+    render();
+
+    btn.addEventListener("click", async () => {
+      if (!uid) return;
+      btn.disabled = true;
+      const was = isBookmarked;
+      isBookmarked = !was;
+      bookmarkedBy = was ? bookmarkedBy.filter(u => u !== uid) : [...bookmarkedBy, uid];
+      render();
+      try {
+        await toggleBookmark(recipe.id, uid, was);
+      } catch (e) {
+        isBookmarked = was;
+        bookmarkedBy = was ? [...bookmarkedBy, uid] : bookmarkedBy.filter(u => u !== uid);
       }
       render();
     });
@@ -193,6 +243,106 @@
       btn.textContent = "コピーしました!";
       setTimeout(() => { btn.textContent = original; }, 1800);
     });
+  }
+
+  async function setupComments(recipe) {
+    const { listComments, addComment, deleteComment } = await import("./js/data.js");
+    const listEl = document.getElementById("comment-list");
+    const countEl = document.getElementById("comment-count");
+    const formArea = document.getElementById("comment-form-area");
+
+    let profile = null;
+    let localUid = null;
+    if (isLocalMode) {
+      const { getLocalUserId } = await import("./js/data.js");
+      localUid = await getLocalUserId();
+    } else {
+      const { getProfile } = await import("./js/auth.js");
+      profile = getProfile();
+    }
+
+    function fmtTime(t) {
+      const ms = typeof t === "number" ? t : (t?.seconds ? t.seconds * 1000 : Date.now());
+      return new Date(ms).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    }
+
+    async function renderComments() {
+      const comments = await listComments(recipe.id);
+      countEl.textContent = comments.length;
+      if (!comments.length) {
+        listEl.innerHTML = `<p style="color:var(--text-muted); font-size:.85rem;">まだコメントはありません。</p>`;
+      } else {
+        listEl.innerHTML = comments.map(c => {
+          const canDelete = isLocalMode || profile?.isAdmin || (profile && profile.uid === c.authorId);
+          return `
+            <div class="comment-item" data-id="${c.id}">
+              <img src="${c.authorAvatar || ''}" alt="" class="comment-avatar" onerror="this.style.display='none'">
+              <div class="comment-body">
+                <div class="comment-head">
+                  <span class="comment-author">${escapeHtml(c.authorName || "名無しさん")}</span>
+                  <span class="comment-time">${fmtTime(c.createdAt)}</span>
+                  ${canDelete ? `<button class="comment-del" data-id="${c.id}" title="削除">✕</button>` : ""}
+                </div>
+                <div class="comment-text">${escapeHtml(c.text)}</div>
+              </div>
+            </div>`;
+        }).join("");
+        listEl.querySelectorAll(".comment-del").forEach(btn => {
+          btn.addEventListener("click", async () => {
+            if (!confirm("このコメントを削除しますか?")) return;
+            await deleteComment(recipe.id, btn.dataset.id);
+            renderComments();
+          });
+        });
+      }
+    }
+
+    function renderForm() {
+      if (isLocalMode) {
+        formArea.innerHTML = `
+          <div class="comment-form">
+            <input type="text" id="comment-name" placeholder="名前(任意)" style="max-width:160px;">
+            <textarea id="comment-text" rows="2" placeholder="コメントを書く..."></textarea>
+            <button id="comment-submit" class="btn btn-primary">投稿</button>
+          </div>`;
+      } else if (!profile) {
+        formArea.innerHTML = `<p style="color:var(--text-muted); font-size:.85rem;">コメントするには <a href="#" id="comment-login" style="color:var(--accent);">Discordでログイン</a> してください。</p>`;
+        document.getElementById("comment-login").addEventListener("click", async (e) => {
+          e.preventDefault();
+          const { loginWithDiscord } = await import("./js/auth.js");
+          loginWithDiscord();
+        });
+        return;
+      } else {
+        formArea.innerHTML = `
+          <div class="comment-form">
+            <textarea id="comment-text" rows="2" placeholder="コメントを書く..."></textarea>
+            <button id="comment-submit" class="btn btn-primary">投稿</button>
+          </div>`;
+      }
+
+      document.getElementById("comment-submit").addEventListener("click", async () => {
+        const textEl = document.getElementById("comment-text");
+        const text = textEl.value.trim();
+        if (!text) return;
+        const fields = { text };
+        if (isLocalMode) {
+          fields.authorId = localUid;
+          fields.authorName = document.getElementById("comment-name").value.trim() || "名無しさん";
+          fields.authorAvatar = "";
+        } else {
+          fields.authorId = profile.uid;
+          fields.authorName = profile.username;
+          fields.authorAvatar = profile.avatarUrl;
+        }
+        textEl.value = "";
+        await addComment(recipe.id, fields);
+        renderComments();
+      });
+    }
+
+    renderComments();
+    renderForm();
   }
 
   load();

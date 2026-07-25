@@ -36,7 +36,7 @@ export async function getRecipe(id) {
 export async function createRecipe(fields) {
   const list = readAll();
   const id = "local_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
-  const record = { id, likedBy: [], likesCount: 0, ...fields, createdAt: Date.now() };
+  const record = { id, likedBy: [], likesCount: 0, bookmarkedBy: [], comments: [], ...fields, createdAt: Date.now() };
   list.push(record);
   writeAll(list);
   return id;
@@ -62,5 +62,39 @@ export async function toggleLike(id, uid, isLiked) {
   if (isLiked) likedBy.delete(uid); else likedBy.add(uid);
   list[idx].likedBy = [...likedBy];
   list[idx].likesCount = likedBy.size;
+  writeAll(list);
+}
+
+export async function toggleBookmark(id, uid, isBookmarked) {
+  const list = readAll();
+  const idx = list.findIndex(r => r.id === id);
+  if (idx === -1) return;
+  const set = new Set(list[idx].bookmarkedBy || []);
+  if (isBookmarked) set.delete(uid); else set.add(uid);
+  list[idx].bookmarkedBy = [...set];
+  writeAll(list);
+}
+
+export async function listComments(recipeId) {
+  const r = readAll().find(x => x.id === recipeId);
+  return (r && r.comments) || [];
+}
+
+export async function addComment(recipeId, fields) {
+  const list = readAll();
+  const idx = list.findIndex(r => r.id === recipeId);
+  if (idx === -1) return;
+  const id = "c_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
+  const comment = { id, ...fields, createdAt: Date.now() };
+  list[idx].comments = [...(list[idx].comments || []), comment];
+  writeAll(list);
+  return id;
+}
+
+export async function deleteComment(recipeId, commentId) {
+  const list = readAll();
+  const idx = list.findIndex(r => r.id === recipeId);
+  if (idx === -1) return;
+  list[idx].comments = (list[idx].comments || []).filter(c => c.id !== commentId);
   writeAll(list);
 }

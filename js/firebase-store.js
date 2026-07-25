@@ -26,6 +26,7 @@ export async function createRecipe(fields) {
     ...fields,
     likedBy: [],
     likesCount: 0,
+    bookmarkedBy: [],
     createdAt: serverTimestamp()
   });
   return docRef.id;
@@ -44,4 +45,28 @@ export async function toggleLike(id, uid, isLiked) {
     likedBy: isLiked ? arrayRemove(uid) : arrayUnion(uid),
     likesCount: increment(isLiked ? -1 : 1)
   });
+}
+
+export async function toggleBookmark(id, uid, isBookmarked) {
+  await updateDoc(doc(db, "recipes", id), {
+    bookmarkedBy: isBookmarked ? arrayRemove(uid) : arrayUnion(uid)
+  });
+}
+
+export async function listComments(recipeId) {
+  const q = query(collection(db, "recipes", recipeId, "comments"), orderBy("createdAt", "asc"));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+export async function addComment(recipeId, fields) {
+  const docRef = await addDoc(collection(db, "recipes", recipeId, "comments"), {
+    ...fields,
+    createdAt: serverTimestamp()
+  });
+  return docRef.id;
+}
+
+export async function deleteComment(recipeId, commentId) {
+  await deleteDoc(doc(db, "recipes", recipeId, "comments", commentId));
 }

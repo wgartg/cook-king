@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ブックマーク | わっしょい みんなの料理人</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <a href="index.html" class="brand">
+    <span class="mark">わっしょい</span>
+    <span class="title">みんなの料理人</span>
+    <span class="sub">community-cookbook</span>
+  </a>
+  <nav class="nav-actions">
+    <span id="auth-area"></span>
+    <button id="theme-toggle" class="icon-btn" title="テーマ切り替え">☾</button>
+    <a href="post.html" class="btn btn-primary">＋ New recipe</a>
+  </nav>
+</header>
+
+<div class="page">
+  <aside class="sidebar">
+    <a href="index.html">📖 レシピ一覧</a>
+    <a href="post.html">＋ 新規投稿</a>
+    <a href="bookmarks.html" class="active">🔖 ブックマーク</a>
+  </aside>
+
+  <main class="content">
+    <div class="section-title">🔖 ブックマーク <span id="count" class="count-badge">0</span></div>
+    <div id="login-required" class="empty-state" style="display:none;">
+      <h3>ログインが必要です</h3>
+      <p>ブックマークを見るにはDiscordログインしてください。</p>
+      <button id="login-btn" class="btn btn-primary">Discordでログイン</button>
+    </div>
+    <div id="grid" class="recipe-grid"></div>
+    <div id="empty" class="empty-state" style="display:none;">
+      <h3>ブックマークしたレシピがありません</h3>
+      <p>気になるレシピの詳細ページで🔖ボタンを押すとここに表示されます。</p>
+    </div>
+  </main>
+</div>
+
+<footer>わっしょい みんなの料理人 — community cookbook, 10 users edition</footer>
+
+<script type="module">
+  import { initTheme, toggleTheme } from "./js/theme.js";
+  import { mountAuthArea } from "./js/auth-ui.js";
+  initTheme();
+  document.getElementById("theme-toggle").addEventListener("click", toggleTheme);
+  mountAuthArea();
+</script>
+
+<script type="module">
+  import { listRecipes, isLocalMode, getLocalUserId } from "./js/data.js";
+
+  function escapeHtml(str) {
+    return (str || "").replace(/[&<>"']/g, c => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    }[c]));
+  }
+
+  const grid = document.getElementById("grid");
+  const emptyEl = document.getElementById("empty");
+  const loginRequired = document.getElementById("login-required");
+  const countEl = document.getElementById("count");
+
+  function cardHtml(r) {
+    const thumb = r.imageUrl
+      ? `<img class="thumb" src="${r.imageUrl}" alt="${escapeHtml(r.title)}">`
+      : `<div class="thumb placeholder">🍚</div>`;
+    return `
+      <a class="recipe-card" href="detail.html?id=${r.id}">
+        <div class="thumb-row">
+          ${thumb}
+          <div>
+            <div class="title">${escapeHtml(r.title)}</div>
+            <div class="author">by ${escapeHtml(r.authorName || "名無しさん")}</div>
+          </div>
+        </div>
+        <div class="meta">
+          <span>⏱ ${r.cookTimeMin || "?"}min</span>
+          <span>🍽 x${r.servings || "?"}</span>
+          <span>❤ ${r.likesCount || 0}</span>
+        </div>
+      </a>`;
+  }
+
+  async function load() {
+    let uid = null;
+    if (isLocalMode) {
+      uid = await getLocalUserId();
+    } else {
+      const { getProfile } = await import("./js/auth.js");
+      const profile = getProfile();
+      if (!profile) {
+        loginRequired.style.display = "block";
+        const { loginWithDiscord } = await import("./js/auth.js");
+        document.getElementById("login-btn").addEventListener("click", loginWithDiscord);
+        return;
+      }
+      uid = profile.uid;
+    }
+
+    grid.innerHTML = `<div class="empty-state">読み込み中...</div>`;
+    try {
+      const all = await listRecipes();
+      const mine = all.filter(r => (r.bookmarkedBy || []).includes(uid));
+      countEl.textContent = mine.length;
+      grid.innerHTML = "";
+      if (!mine.length) {
+        emptyEl.style.display = "block";
+      } else {
+        emptyEl.style.display = "none";
+        grid.innerHTML = mine.map(cardHtml).join("");
+      }
+    } catch (e) {
+      grid.innerHTML = `<div class="empty-state"><h3>読み込みに失敗しました</h3><p>${escapeHtml(e.message)}</p></div>`;
+    }
+  }
+
+  load();
+</script>
+</body>
+</html>

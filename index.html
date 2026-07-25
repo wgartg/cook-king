@@ -25,6 +25,7 @@
   <aside class="sidebar">
     <a href="index.html" class="active">📖 レシピ一覧</a>
     <a href="post.html">＋ 新規投稿</a>
+    <a href="bookmarks.html">🔖 ブックマーク</a>
   </aside>
 
   <main class="content">
@@ -34,6 +35,11 @@
 
     <div class="search-row">
       <input id="search" type="text" placeholder="料理名・材料で検索 (例: 鶏むね, 味噌汁)">
+      <select id="sort">
+        <option value="new">新着順</option>
+        <option value="likes">いいね順</option>
+        <option value="quick">調理時間が短い順</option>
+      </select>
     </div>
 
     <div class="section-title">
@@ -64,6 +70,7 @@
   const grid = document.getElementById("grid");
   const emptyEl = document.getElementById("empty");
   const searchInput = document.getElementById("search");
+  const sortSelect = document.getElementById("sort");
   const countEl = document.getElementById("count");
   let allRecipes = [];
 
@@ -73,6 +80,10 @@
     return (str || "").replace(/[&<>"']/g, c => ({
       "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
     }[c]));
+  }
+
+  function difficultyLabel(d) {
+    return { easy: "🎚 簡単", normal: "🎚 普通", hard: "🎚 難しい" }[d] || "";
   }
 
   function cardHtml(r) {
@@ -93,41 +104,61 @@
           <span>🍽 x${r.servings || "?"}</span>
           <span>🥕 ${(r.ingredients || []).length} items</span>
           <span>❤ ${r.likesCount || 0}</span>
+          ${r.difficulty ? `<span>${difficultyLabel(r.difficulty)}</span>` : ""}
         </div>
       </a>`;
   }
 
+  function sortList(list) {
+    const sorted = [...list];
+    if (sortSelect.value === "likes") {
+      sorted.sort((a, b) => (b.likesCount || 0) - (a.likesCount || 0));
+    } else if (sortSelect.value === "quick") {
+      sorted.sort((a, b) => (a.cookTimeMin || Infinity) - (b.cookTimeMin || Infinity));
+    } else {
+      sorted.sort((a, b) => {
+        const at = typeof a.createdAt === "number" ? a.createdAt : (a.createdAt?.seconds || 0) * 1000;
+        const bt = typeof b.createdAt === "number" ? b.createdAt : (b.createdAt?.seconds || 0) * 1000;
+        return bt - at;
+      });
+    }
+    return sorted;
+  }
+
   function render(list) {
-    countEl.textContent = list.length;
-    if (!list.length) {
+    const sorted = sortList(list);
+    countEl.textContent = sorted.length;
+    if (!sorted.length) {
       grid.innerHTML = "";
       emptyEl.style.display = "block";
       return;
     }
     emptyEl.style.display = "none";
-    grid.innerHTML = list.map(cardHtml).join("");
+    grid.innerHTML = sorted.map(cardHtml).join("");
+  }
+
+  function currentFiltered() {
+    const kw = searchInput.value.trim().toLowerCase();
+    if (!kw) return allRecipes;
+    return allRecipes.filter(r => {
+      const inTitle = (r.title || "").toLowerCase().includes(kw);
+      const inIngredients = (r.ingredients || []).some(i => (i.name || "").toLowerCase().includes(kw));
+      return inTitle || inIngredients;
+    });
   }
 
   async function load() {
     grid.innerHTML = `<div class="empty-state">読み込み中...</div>`;
     try {
       allRecipes = await listRecipes();
-      render(allRecipes);
+      render(currentFiltered());
     } catch (e) {
       grid.innerHTML = `<div class="empty-state"><h3>読み込みに失敗しました</h3><p>${escapeHtml(e.message)}</p><p>js/firebase-config.js の設定を確認してください。</p></div>`;
     }
   }
 
-  searchInput.addEventListener("input", () => {
-    const kw = searchInput.value.trim().toLowerCase();
-    if (!kw) { render(allRecipes); return; }
-    const filtered = allRecipes.filter(r => {
-      const inTitle = (r.title || "").toLowerCase().includes(kw);
-      const inIngredients = (r.ingredients || []).some(i => (i.name || "").toLowerCase().includes(kw));
-      return inTitle || inIngredients;
-    });
-    render(filtered);
-  });
+  searchInput.addEventListener("input", () => render(currentFiltered()));
+  sortSelect.addEventListener("change", () => render(currentFiltered()));
 
   load();
 </script>

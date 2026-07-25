@@ -43,6 +43,26 @@ export async function toggleLike(...args) {
   return impl.toggleLike(...args);
 }
 
+export async function toggleBookmark(...args) {
+  const impl = await loadImpl();
+  return impl.toggleBookmark(...args);
+}
+
+export async function listComments(...args) {
+  const impl = await loadImpl();
+  return impl.listComments(...args);
+}
+
+export async function addComment(...args) {
+  const impl = await loadImpl();
+  return impl.addComment(...args);
+}
+
+export async function deleteComment(...args) {
+  const impl = await loadImpl();
+  return impl.deleteComment(...args);
+}
+
 // ローカルモードのみ有効(Firebaseモードではnullを返す)
 export async function getLocalUserId(...args) {
   const impl = await loadImpl();
